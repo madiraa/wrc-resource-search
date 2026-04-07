@@ -1,0 +1,10 @@
+# Core dependencies for WRC Resource Digitization System
+anthropic>=0.21.0
+pillow-heif>=0.13.0
+Pillow>=10.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+PyYAML>=6.0
+sentence-transformers>=2.2.0
+tqdm>=4.65.0
+streamlit>=1.28.0
