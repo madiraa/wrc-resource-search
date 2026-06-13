@@ -1,6 +1,6 @@
 # WRC Resource Search
 
-Women's Resource Center resource finder for City College of San Francisco. A Streamlit app for searching support resources — with a planned next phase for guided intake and automated outreach to agencies on the student's behalf.
+Women's Resource Center resource finder for City College of San Francisco. A Streamlit app for searching support resources, with a guided intake flow and **mandatory staff approval** before any referral is sent to an outside organization.
 
 ## Run locally
 
@@ -11,43 +11,69 @@ streamlit run app.py
 
 Requires `wrc_resources.db` in the project root.
 
-## Features today
+## App pages
 
-- AI semantic search and keyword search over 800+ WRC resources
-- Quick-search categories (housing, safety, legal, food, childcare, and more)
-- CCSF and crisis resource prioritization
-- Browse all resources and CSV export
+| Page | Who | Purpose |
+| --- | --- | --- |
+| **Resource Search** (home) | Anyone | AI + keyword search over 800+ resources |
+| **Get Help** | Students | Intake → match → consent → submit for review |
+| **Staff Approval** | WRC staff (you) | Review student needs + matched org → approve or reject |
 
-## Next phase: intake & automated outreach
+## Referral workflow
 
-Instead of full case management (saved plans, staff dashboards), the next feature set focuses on:
+```
+Student completes intake & consents
+        ↓
+Request queued (pending approval) — nothing is sent yet
+        ↓
+You open Staff Approval — see needs context, matched org, draft email
+        ↓
+Approve (send referral) or Reject (with reason)
+```
 
-1. **Asking structured questions** about the student's situation
-2. **Matching** them to the best resources (existing RAG search)
-3. **Reaching out to those resources on the student's behalf** — consent-based referral emails so the student isn't left to make the cold call alone
+**No referral is sent without your explicit approval.**
 
-See **[PROJECT_PLAN.md](./PROJECT_PLAN.md)** for scope, safety rules, open questions for stakeholders, and phased implementation.
+## Staff Approval setup
+
+Protect the approval page with a password in Streamlit secrets (`.streamlit/secrets.toml`):
+
+```toml
+approver_password = "your-secure-password"
+```
+
+Or set environment variable `APPROVER_PASSWORD`.
+
+Optional (Phase 2 — email sending on approve):
+
+```toml
+WRC_FROM_EMAIL = "wrc-referrals@ccsf.edu"
+SMTP_HOST = "smtp.example.com"
+SMTP_PORT = "587"
+SMTP_USERNAME = "..."
+SMTP_PASSWORD = "..."
+```
 
 ## Deploy (Streamlit Cloud)
 
 1. Push this repo to GitHub
 2. Connect at [share.streamlit.io](https://share.streamlit.io)
 3. Set main file to `app.py`
-
-Email outreach (Phase 2) will require CCSF-approved SMTP or SendGrid credentials in Streamlit secrets.
+4. Add `approver_password` (and SMTP vars when ready) in app secrets
 
 ## Project structure
 
 ```
-app.py              # Streamlit web app
-database.py         # SQLite schema and queries
-rag_system.py       # Semantic search with embeddings
-wrc_resources.db    # Resource database
-PROJECT_PLAN.md     # Intake + outreach roadmap
+app.py                  # Resource Search (home)
+pages/
+  2_Get_Help.py         # Student intake → pending approval
+  3_Staff_Approval.py   # Staff review queue
+intake/                 # Matching, templates, safety checks
+referral_queue.py       # referral_requests database
+database.py             # Resource SQLite schema
+rag_system.py           # Semantic search
+PROJECT_PLAN.md         # Full scope & phases
 ```
 
-## Notes
+## Next steps
 
-- Built for the Women's Resource Center at City College of San Francisco
-- Resource contact details should be verified regularly; ~25% of current resources have email on file
-- Automated outreach requires staff review for safety-related intakes (see project plan)
+See **[PROJECT_PLAN.md](./PROJECT_PLAN.md)** for Phase 2 (email sending on approve) and open questions for CCSF IT / WRC policy.

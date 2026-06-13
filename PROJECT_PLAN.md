@@ -41,38 +41,41 @@ Staff cannot make every referral call during drop-in hours. A guided intake that
 
 ## Core user journey
 
+**Every referral requires human approval.** No message is sent to an outside organization until a staff reviewer (you) assesses the student’s needs, the matched organization(s), and explicitly approves the send.
+
 ```mermaid
 flowchart TD
     A[Student opens Streamlit app] --> B[Guided intake questions]
     B --> C[System matches 1–3 resources]
     C --> D[Student reviews match + outreach preview]
-    D --> E{Consent & safety check}
-    E -->|Crisis / safety concern| F[No auto-outreach — show crisis path + staff handoff]
-    E -->|Student consents| G[Send referral to resource org]
-    G --> H[Student gets confirmation + what happens next]
-    H --> I[Optional: notify student when resource responds]
+    D --> E[Student consent]
+    E --> F[Request queued — status: pending approval]
+    F --> G[Staff reviewer receives overview]
+    G --> H{Suitable match?}
+    H -->|No| I[Reject with reason — student may resubmit]
+    H -->|Yes| J[Approve match]
+    J --> K[Send referral email or manual/phone follow-up]
+    K --> L[Student confirmation + what happens next]
 ```
 
-### What “reach out on the student’s behalf” means
+### Mandatory staff approval gate
 
-**In scope (realistic MVP):**
+After the student consents, the system **does not send anything**. Instead it creates a `referral_request` with:
 
-- Send a **referral email** from a WRC-controlled address (e.g. `wrc-referrals@ccsf.edu`) to the resource organization’s listed email
-- Email includes only **student-approved** information (name, contact method, need summary, CCSF student status if relevant)
-- Standard WRC referral template: who referred, what the student needs, how the agency should follow up **with the student directly**
-- Log that outreach was sent (timestamp, resource ID — minimal metadata)
+| What you see | Purpose |
+| --- | --- |
+| Student needs & context | Primary need, urgency, housing, dependents, deadlines, free text |
+| Contact preferences | Name, phone/email, safe contact notes, language |
+| Matched organization(s) | Name, type, contact info, eligibility, match score, outreach channel |
+| Draft referral email | Exact message that would be sent |
+| Safety flags | Crisis/DV-related intakes flagged for extra care |
 
-**Semi-automated (recommended for MVP):**
+**Your actions:**
 
-- Student completes intake → staff or peer counselor **reviews and approves** send (one-click)
-- Reduces errors and protects survivors in sensitive cases
+- **Approve match & send referral** — confirms the org is appropriate; triggers email if available, or flags phone/manual follow-up
+- **Reject match** — requires a reason (e.g., wrong org, need more info, safety concern)
 
-**Out of scope for MVP:**
-
-- Robocalls or AI phone calls to agencies
-- Submitting web forms on third-party sites (fragile, often blocked)
-- Pretending to be the student (must be transparent WRC referral)
-- Auto-outreach for **crisis/DV** intakes without mandatory staff review
+Implemented in Streamlit: **Staff Approval** page (`pages/3_Staff_Approval.py`), password-protected via `approver_password` secret.
 
 ---
 
@@ -196,7 +199,7 @@ Women’s Resource Center work intersects **FERPA**, **Title IX**, and **survivo
 | Wrong email in database | Confirm email domain looks valid; flag low-confidence contacts |
 | Agency is a hotline (SFWAR, etc.) | **Never email a hotline for a student.** Show number; student calls or staff assists in person |
 
-**Default posture:** Semi-automated (staff approval) until WRC leadership signs off on fully automated sends for low-risk categories (e.g., food pantry, childcare waitlist).
+**Default posture:** **Human approval required for every referral.** There is no auto-send path in the MVP. Safety-flagged intakes display an extra warning on the staff review screen.
 
 ---
 
@@ -204,84 +207,73 @@ Women’s Resource Center work intersects **FERPA**, **Title IX**, and **survivo
 
 ```mermaid
 flowchart LR
-    subgraph streamlit [Streamlit app]
-        INT[Intake pages]
-        MATCH[Match engine]
-        PREVIEW[Outreach preview + consent]
-        SEND[Send / queue]
+    subgraph student [Student pages]
+        INT[Get Help intake]
+        CONSENT[Consent + submit]
     end
 
-    subgraph backend [Backend services]
+    subgraph staff [Staff page]
+        QUEUE[Approval queue]
+        REVIEW[Needs + match overview]
+        DECIDE[Approve or reject]
+    end
+
+    subgraph backend [Backend]
         RAG[rag_system.py]
         DB[(wrc_resources.db)]
-        MAIL[Email provider e.g. SendGrid / SMTP]
-        LOG[(outreach_log table)]
+        RQ[referral_requests table]
+        MAIL[Email SMTP / SendGrid]
     end
 
-    INT --> MATCH
-    MATCH --> RAG
+    INT --> RAG
     RAG --> DB
-    MATCH --> PREVIEW
-    PREVIEW --> SEND
-    SEND --> MAIL
-    SEND --> LOG
+    CONSENT --> RQ
+    QUEUE --> RQ
+    REVIEW --> DECIDE
+    DECIDE -->|approve| MAIL
+    DECIDE --> RQ
 ```
 
-### Suggested module layout
+### Module layout (implemented / planned)
 
 ```
 intake/
-  questions.py       # Intake schema, validation, urgency flags
   matcher.py         # Intake → RAG query → ranked resources
-  outreach.py        # Template rendering, consent checks
-  safety.py          # Block auto-send rules
-  email_sender.py    # SMTP / SendGrid integration
+  outreach.py        # Referral email template
+  safety.py          # Safety flags, outreach channel checks
+  email_sender.py    # SMTP send (Phase 2)
+referral_queue.py    # referral_requests CRUD + approval states
 pages/
-  1_Resource_Search.py    # Existing search (refactor from app.py)
-  2_Get_Help.py           # Intake wizard
-  3_Review_and_Send.py    # Preview + consent + send/queue
+  2_Get_Help.py           # Student intake → consent → pending approval
+  3_Staff_Approval.py     # Staff review queue (password protected)
+app.py               # Resource Search (home page)
 ```
-
-### New database table (minimal)
-
-```sql
-CREATE TABLE outreach_log (
-  outreach_id INTEGER PRIMARY KEY,
-  resource_id INTEGER,
-  sent_at TIMESTAMP,
-  status TEXT,              -- queued, sent, failed, staff_review, blocked_safety
-  intake_summary_hash TEXT, -- no full PII if policy requires
-  student_contact_method TEXT,
-  approved_by TEXT          -- 'student_self' or 'staff:user_id'
-);
-```
-
-Store **minimal** metadata unless CCSF policy allows more. Full intake text should not live in logs long-term without review.
 
 ---
 
 ## Functional requirements
 
-### Phase 1 — Intake + match (no send yet)
+### Phase 1 — Intake + staff approval queue ✅ (implemented)
 
-- [ ] Multi-step intake form in Streamlit
-- [ ] Intake → RAG query generation
-- [ ] Show top 1–3 matches with “why this resource”
-- [ ] Outreach preview (read-only) so stakeholders can review copy
-- [ ] Safety rules block preview-send for crisis intakes
+- [x] Multi-step intake form in Streamlit (`pages/2_Get_Help.py`)
+- [x] Intake → RAG query generation
+- [x] Student selects match, edits need summary, previews referral
+- [x] Consent → submit for **pending approval** (no send)
+- [x] Staff approval page with needs overview, matched orgs, message preview
+- [x] Approve / reject actions with notes
+- [x] `referral_requests` table
+- [x] Safety flags on review screen
 
-**Acceptance:** Student completes intake and sees recommended resources + draft referral email text.
+**Acceptance:** Student submits request → appears in Staff Approval queue → you approve or reject before any outreach.
 
-### Phase 2 — Semi-automated outreach (staff-approved send)
+### Phase 2 — Email sending on approval
 
-- [ ] Student consent flow + editable need summary
-- [ ] Staff approval queue (simple list in Streamlit, password or CCSF login TBD)
-- [ ] Send email via WRC SMTP / SendGrid
-- [ ] Student confirmation screen: “We contacted [org]; expect follow-up in X days”
-- [ ] `outreach_log` table
-- [ ] Phone-only fallback: call script for student or “WRC will call within 24h” staff task
+- [ ] Configure WRC SMTP / SendGrid in Streamlit secrets
+- [ ] Send referral email when staff approves and org has email
+- [ ] Phone-only fallback workflow after approval
+- [ ] Optional email notification to approver when new request is submitted
 
-**Acceptance:** End-to-end referral email sent for a food/housing resource with staff approval.
+**Acceptance:** End-to-end referral email sent only after staff approval.
 
 ### Phase 3 — Student notifications & iteration
 
@@ -290,10 +282,10 @@ Store **minimal** metadata unless CCSF policy allows more. Full intake text shou
 - [ ] Template library by need type (housing, legal, childcare)
 - [ ] Track which resources respond / bounce (operational, not student-facing CRM)
 
-### Phase 4 — Scale & policy (only after review)
+### Phase 4 — Scale (only after review)
 
-- [ ] Auto-send without staff for low-risk categories
-- [ ] CCSF SSO for staff queue
+- [ ] Email notification to approver on new submissions
+- [ ] CCSF SSO for staff page
 - [ ] Multilingual intake and outreach templates
 
 ---
@@ -307,7 +299,7 @@ These should be answered **before** Phase 2 goes live:
 1. **Sending identity:** Should emails come from a shared WRC inbox, a staff member’s address, or `noreply@` with reply-to set to WRC?
 2. **Student identity:** Full name, first name only, or student ID?
 3. **Student contact in referral:** Include student phone/email directly, or ask agency to contact WRC first?
-4. **Staff approval:** Is every referral staff-approved, or only safety-tagged intakes?
+4. **Staff approval:** **Every referral** — you review needs + match before send ✅
 5. **Volume:** How many automated referrals per week can partner agencies realistically absorb?
 
 ### Legal & compliance
