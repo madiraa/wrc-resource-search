@@ -1,6 +1,8 @@
 # WRC Resource Search
 
-Women's Resource Center resource finder for City College of San Francisco. A Streamlit app for searching support resources, with a guided intake flow and **mandatory staff approval** before any referral is sent to an outside organization.
+Women's Resource Center resource finder for City College of San Francisco. A Streamlit app for searching support resources, with a guided intake flow (evolving into **AI chat**) and **mandatory staff approval** before any referral is sent.
+
+**Technical scope for conversational intake:** [TECHNICAL_SCOPE_INTAKE.md](./TECHNICAL_SCOPE_INTAKE.md)
 
 ## Run locally
 
@@ -16,7 +18,7 @@ Requires `wrc_resources.db` in the project root.
 | Page | Who | Purpose |
 | --- | --- | --- |
 | **Resource Search** (home) | Anyone | AI + keyword search over 800+ resources |
-| **Get Help** | Students | Intake → match → consent → submit for review |
+| **Get Help** | Students | Intake (form today → **AI chat** target) → consent → submit for review |
 | **Staff Approval** | WRC staff (you) | Review student needs + matched org → approve or reject |
 
 ## Referral workflow

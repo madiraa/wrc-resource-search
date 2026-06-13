@@ -72,6 +72,9 @@ class ReferralQueue:
         outreach_subject: str,
         outreach_body: str,
         safety_review_required: bool = False,
+        conversation_id: Optional[str] = None,
+        conversation_summary: Optional[str] = None,
+        transcript_excerpt: Optional[str] = None,
     ) -> str:
         now = datetime.now(timezone.utc).isoformat()
         request_id = str(uuid.uuid4())
@@ -96,6 +99,12 @@ class ReferralQueue:
             "safety_review_required": 1 if safety_review_required else 0,
             "consent_at": now,
         }
+        if conversation_id is not None:
+            payload["conversation_id"] = conversation_id
+        if conversation_summary is not None:
+            payload["conversation_summary"] = conversation_summary
+        if transcript_excerpt is not None:
+            payload["transcript_excerpt"] = transcript_excerpt
 
         columns = ", ".join(payload.keys())
         placeholders = ", ".join("?" for _ in payload)

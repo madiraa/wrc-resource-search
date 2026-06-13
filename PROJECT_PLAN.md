@@ -6,9 +6,11 @@ The WRC Resource Search tool helps students **find** support. The next phase kee
 
 Instead, the system will:
 
-1. **Ask structured questions** about the student’s situation and needs
+1. **Discuss needs in a conversational intake** with an AI assistant (replacing the interim form)
 2. **Match** them to the best resources from `wrc_resources.db` (using existing RAG search)
 3. **Reach out to those resources on the student’s behalf** — starting with a consent-based referral message — so the student is not left to make the first contact alone
+
+**Technical scope for chat + context storage:** [TECHNICAL_SCOPE_INTAKE.md](./TECHNICAL_SCOPE_INTAKE.md)
 
 This document defines scope, open questions, phases, and safety constraints so the outreach feature can be designed responsibly before any code is written.
 
@@ -45,17 +47,17 @@ Staff cannot make every referral call during drop-in hours. A guided intake that
 
 ```mermaid
 flowchart TD
-    A[Student opens Streamlit app] --> B[Guided intake questions]
-    B --> C[System matches 1–3 resources]
-    C --> D[Student reviews match + outreach preview]
-    D --> E[Student consent]
-    E --> F[Request queued — status: pending approval]
-    F --> G[Staff reviewer receives overview]
-    G --> H{Suitable match?}
-    H -->|No| I[Reject with reason — student may resubmit]
-    H -->|Yes| J[Approve match]
-    J --> K[Send referral email or manual/phone follow-up]
-    K --> L[Student confirmation + what happens next]
+    A[Student opens Get Help] --> B[AI intake chat — multi-turn]
+    B --> C[Context stored — IntakeContext + transcript]
+    C --> D[System matches 1–3 resources]
+    D --> E[Student reviews match + outreach preview]
+    E --> F[Student consent]
+    F --> G[Request queued — pending approval]
+    G --> H[Staff reviewer sees context + chat summary]
+    H --> I{Suitable match?}
+    I -->|No| J[Reject with reason]
+    I -->|Yes| K[Approve → send referral]
+    K --> L[Student confirmation]
 ```
 
 ### Mandatory staff approval gate
@@ -79,11 +81,31 @@ Implemented in Streamlit: **Staff Approval** page (`pages/3_Staff_Approval.py`),
 
 ---
 
-## Intake questionnaire design
+## Intake design — conversational (target)
 
-The intake is **not** a clinical assessment. It gathers enough to match resources and draft outreach.
+The interim **form** in `pages/2_Get_Help.py` will be replaced by a **chatbot** that discusses the student's needs with AI, stores conversation context, and extracts structured fields for matching and referral.
 
-### Section 1 — Primary need
+See **[TECHNICAL_SCOPE_INTAKE.md](./TECHNICAL_SCOPE_INTAKE.md)** for:
+
+- Chat infrastructure (`ChatEngine`, phased prompts, Anthropic LLM)
+- Context storage (`conversations`, `messages`, `intake_context_snapshots` tables)
+- Intake phase state machine (greeting → exploring → matching → consent)
+- How chat handoff feeds staff approval (summary + transcript excerpt)
+
+### Structured fields still required (extracted from chat)
+
+The chat must still populate the same fields the form collects today — matching and referral depend on them:
+
+| Category | Fields |
+| --- | --- |
+| Need | `primary_need`, `urgency`, `need_summary` |
+| Context | CCSF student, dependents, housing status, deadline |
+| Contact | name, phone/email, preferred method, safe contact notes |
+| Safety | `safety_review_required`, crisis flags |
+
+### Interim form (being replaced)
+
+The form below remains until Phase C (chat UI) ships:
 
 - What do you need help with? (housing, safety, legal, food, childcare, health, employment, education, financial, other)
 - How urgent is this? (crisis / this week / planning ahead)
@@ -237,25 +259,31 @@ flowchart LR
 ### Module layout (implemented / planned)
 
 ```
+chat/                       # NEW — conversational intake
+  store.py                  # conversations, messages, context snapshots
+  engine.py                 # ChatEngine (Phase B: full LLM pipeline)
+  models.py                 # IntakeContext, Message, Conversation
+  prompts.py                # Phase-specific system prompts
 intake/
-  matcher.py         # Intake → RAG query → ranked resources
-  outreach.py        # Referral email template
-  safety.py          # Safety flags, outreach channel checks
-  email_sender.py    # SMTP send (Phase 2)
-referral_queue.py    # referral_requests CRUD + approval states
+  matcher.py                # Intake → RAG query → ranked resources
+  outreach.py               # Referral email template
+  safety.py                 # Safety flags, outreach channel checks
+  email_sender.py           # SMTP send (Phase 2)
+referral_queue.py           # referral_requests CRUD + approval states
 pages/
-  2_Get_Help.py           # Student intake → consent → pending approval
-  3_Staff_Approval.py     # Staff review queue (password protected)
-app.py               # Resource Search (home page)
+  2_Get_Help.py             # Student intake (form → chat in Phase C)
+  3_Staff_Approval.py       # Staff review queue (password protected)
+app.py                      # Resource Search (home page)
+TECHNICAL_SCOPE_INTAKE.md   # Chat + context storage technical spec
 ```
 
 ---
 
 ## Functional requirements
 
-### Phase 1 — Intake + staff approval queue ✅ (implemented)
+### Phase 1 — Intake + staff approval queue ✅ (form interim)
 
-- [x] Multi-step intake form in Streamlit (`pages/2_Get_Help.py`)
+- [x] Multi-step intake **form** in Streamlit (`pages/2_Get_Help.py`) — interim until chat UI
 - [x] Intake → RAG query generation
 - [x] Student selects match, edits need summary, previews referral
 - [x] Consent → submit for **pending approval** (no send)
@@ -263,8 +291,19 @@ app.py               # Resource Search (home page)
 - [x] Approve / reject actions with notes
 - [x] `referral_requests` table
 - [x] Safety flags on review screen
+- [x] Chat storage foundation (`chat/store.py`, `TECHNICAL_SCOPE_INTAKE.md`)
 
 **Acceptance:** Student submits request → appears in Staff Approval queue → you approve or reject before any outreach.
+
+### Phase 1b — Conversational intake (chat)
+
+- [ ] `ChatEngine` with Anthropic LLM + phase state machine
+- [ ] Structured field extraction from dialogue
+- [ ] Chat UI replacing form in `pages/2_Get_Help.py`
+- [ ] Conversation summary + transcript on Staff Approval page
+- [ ] `conversation_id` linked on referral submit
+
+**Acceptance:** Student completes intake via chat; context persisted; staff sees summary + can approve/reject.
 
 ### Phase 2 — Email sending on approval
 
