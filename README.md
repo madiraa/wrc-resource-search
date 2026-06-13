@@ -65,17 +65,18 @@ SMTP_PASSWORD = "..."
 ## Project structure
 
 ```
-app.py                  # Resource Search (home)
+app.py                       # Resource Search (home)
 pages/
-  2_Get_Help.py         # Student intake → pending approval
-  3_Staff_Approval.py   # Staff review queue
-intake/                 # Matching, templates, safety checks
-referral_queue.py       # referral_requests database
-database.py             # Resource SQLite schema
-rag_system.py           # Semantic search
-PROJECT_PLAN.md         # Full scope & phases
+  2_Get_Help.py              # Student intake (form interim; chat in Phase C)
+  3_Staff_Approval.py        # Staff review queue
+chat/                        # Conversation storage + ChatEngine (Phase B/C)
+intake/                      # Matching, templates, safety
+referral_queue.py            # referral_requests + approval states
+TECHNICAL_SCOPE_INTAKE.md    # Chat infrastructure & context storage spec
+PROJECT_PLAN.md              # Product scope & phases
 ```
 
 ## Next steps
 
-See **[PROJECT_PLAN.md](./PROJECT_PLAN.md)** for Phase 2 (email sending on approve) and open questions for CCSF IT / WRC policy.
+1. **[TECHNICAL_SCOPE_INTAKE.md](./TECHNICAL_SCOPE_INTAKE.md)** — chat engine, context storage, implementation phases
+2. **[PROJECT_PLAN.md](./PROJECT_PLAN.md)** — staff approval, outreach, policy questions
